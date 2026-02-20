@@ -28,6 +28,7 @@ app.on("ready", () => {
         // This apparently exists but my LSP complains
         // visibleOnAllWorkspaces: true, // MacOS, Linux
         alwaysOnTop: true,
+        enableLargerThanScreen: true,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
