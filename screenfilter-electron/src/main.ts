@@ -40,4 +40,5 @@ app.on("ready", () => {
     browserWindow.setAlwaysOnTop(true, 'screen-saver');
     //browserWindow.setSimpleFullScreen(true);
     browserWindow.loadFile('index.html');
+    browserWindow.webContents.openDevTools({ mode: 'detach' });
 });
