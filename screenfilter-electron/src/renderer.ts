@@ -18,6 +18,12 @@ navigator.mediaDevices.getDisplayMedia({
 
   let lastPngCallTime = 0;
   let intervals: number[] = [];
+  // Settings and initial state for the censoring algorithm.
+  let censorCtx: CensorContext = {
+    history: [],
+    ring_start: 0,
+    ring_size: 10
+  };
 
   setInterval(() =>  {
     // @ts-ignore
@@ -26,6 +32,7 @@ navigator.mediaDevices.getDisplayMedia({
       canvas.height = bitmap.height;
       // @ts-ignore
       ctx.drawImage(bitmap, 0, 0);
+      censor(censorCtx, bitmap, canvas);
       document.getElementsByTagName("img")[0].src = canvas.toDataURL('image/png');
     })
   }, 1);
