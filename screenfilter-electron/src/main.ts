@@ -16,6 +16,9 @@ app.on("ready", () => {
     });
     browserWindow.setIgnoreMouseEvents(true);
 
+    // we need to make the window take up the entire desktop space
+    browserWindow.maximize();
+
     session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
         desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
         // Grant access to the first screen found.
