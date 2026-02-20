@@ -16,8 +16,16 @@ app.on("ready", () => {
     });
     browserWindow.setIgnoreMouseEvents(true);
 
-    desktopCapturer.getSources({ types: ['screen'] }).then(sources => {
-        const imageURL = sources[0].thumbnail.toDataURL();
-        browserWindow.loadURL(imageURL);
-    });
+    session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+        desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
+        // Grant access to the first screen found.
+        callback({ video: sources[0], audio: 'loopback' })
+        })
+        // If true, use the system picker if available.
+        // Note: this is currently experimental. If the system picker
+        // is available, it will be used and the media request handler
+        // will not be invoked.
+    }, { useSystemPicker: true })
+
+    browserWindow.loadFile('index.html');
 });
