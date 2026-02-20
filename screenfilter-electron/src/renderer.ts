@@ -14,11 +14,15 @@ navigator.mediaDevices.getDisplayMedia({
   const capture = new ImageCapture(videoTrack);
   setInterval(() =>  {
     capture.takePhoto().then(blob => {
-      // @ts-ignore
-      sharp(blob).then((sharpObj) => {
-          sharpObj.png()
-      })
-    })
+      console.log(blob);
+      const url = URL.createObjectURL(blob);
+      const img = document.getElementsByTagName("img")[0];
+
+      // Revoke the previous object URL to avoid memory leaks
+      if (img.src.startsWith("blob:")) URL.revokeObjectURL(img.src);
+
+      img.src = url;
+    });
   }, 33.3);
 
   // NOTE: This stream object is where you can

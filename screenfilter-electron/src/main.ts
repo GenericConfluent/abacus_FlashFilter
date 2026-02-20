@@ -28,6 +28,11 @@ app.on("ready", () => {
         // This apparently exists but my LSP complains
         // visibleOnAllWorkspaces: true, // MacOS, Linux
         alwaysOnTop: true,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            webSecurity: false // temporarily disable to confirm CSP is the blocker
+        }
     });
     //REGION: set cer
     browserWindow.setIgnoreMouseEvents(true);
