@@ -1,9 +1,10 @@
-import { app, ipcMain, desktopCapturer, session,  BrowserWindow } from 'electron';
+import { app, ipcMain, desktopCapturer, session,  BrowserWindow, screen } from 'electron';
 
 // WARN: The focusable flag that allows input passthrough only works on windows
 // and MacOS.
 app.on("ready", () => {
     // Set up the media handler BEFORE creating the window
+    const { width, height } = screen.getPrimaryDisplay().bounds;
     session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
         desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
         // Grant access to the first screen found.
@@ -30,6 +31,8 @@ app.on("ready", () => {
     });
     //REGION: set cer
     browserWindow.setIgnoreMouseEvents(true);
-    browserWindow.setSimpleFullScreen(true);
+    browserWindow.setBounds({ x: 0, y: 0, width, height });
+    browserWindow.setAlwaysOnTop(true, 'screen-saver');
+    //browserWindow.setSimpleFullScreen(true);
     browserWindow.loadFile('index.html');
 });
