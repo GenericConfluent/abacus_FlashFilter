@@ -12,30 +12,23 @@ navigator.mediaDevices.getDisplayMedia({
   console.log(stream);
   const videoTrack = stream.getVideoTracks()[0];
   const capture = new ImageCapture(videoTrack);
+  const img = document.querySelector('img');
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
 
   let lastPngCallTime = 0;
   let intervals: number[] = [];
 
   setInterval(() =>  {
-    capture.takePhoto().then(blob => {
-
+    // @ts-ignore
+    capture.grabFrame().then((bitmap)=> {
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
       // @ts-ignore
-      sharp(blob).then((sharpObj) => {
-          const now = performance.now();
-          if (lastPngCallTime > 0) {
-            const delta = now - lastPngCallTime;
-            intervals.push(delta);
-            if (intervals.length % 100 === 0) {
-              const average = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-              // @ts-ignore
-              console.log(`Average time between png() calls: ${average.toFixed(2)}ms (${intervals.length} samples)`);
-            }
-          }
-          lastPngCallTime = now;
-          sharpObj.png()
-      })
+      ctx.drawImage(bitmap, 0, 0);
+      document.getElementsByTagName("img")[0].src = canvas.toDataURL('image/png');
     })
-  }, 33.3);
+  }, 1);
 
   // NOTE: This stream object is where you can
   // get the actual frame data 

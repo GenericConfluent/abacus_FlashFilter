@@ -38,6 +38,7 @@ app.on("ready", () => {
     browserWindow.setIgnoreMouseEvents(true);
     browserWindow.setBounds({ x: x, y: y, width, height });
     browserWindow.setAlwaysOnTop(true, 'screen-saver');
+    browserWindow.setContentProtection(true)
     //browserWindow.setSimpleFullScreen(true);
     browserWindow.loadFile('index.html');
     browserWindow.webContents.openDevTools({ mode: 'detach' });
