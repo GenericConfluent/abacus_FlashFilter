@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import  {screen } from "electron";
-
+import { censor, CensorContext } from './censor';
 
 
 // renderer.js
@@ -9,6 +9,14 @@ const { ipcRenderer } = require('electron');
 let screenWidth = window.innerWidth;
 let screenHeight = window.innerHeight;
 
+let lastPngCallTime = 0;
+let intervals: number[] = [];
+// Settings and initial state for the censoring algorithm.
+let censorCtx: CensorContext = {
+  history: [],
+  ring_start: 0,
+  ring_size: 10
+};
 
 // Get accurate dimensions from main process (handles Retina/HiDPI correctly)
 // @ts-ignore
@@ -43,11 +51,12 @@ function startCapture() {
     setInterval(() => {
       // @ts-ignore
       capture.grabFrame().then((bitmap) => {
-        // canvas.width = bitmap.width;
-        // canvas.height = bitmap.height;
-        // // @ts-ignore
-        // ctx.drawImage(bitmap, 0, 0);
-        // document.getElementsByTagName("img")[0].src = canvas.toDataURL('image/png');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        // @ts-ignore
+        ctx.drawImage(bitmap, 0, 0);
+        censor(censorCtx, bitmap, canvas);
+        document.getElementsByTagName("img")[0].src = canvas.toDataURL('image/png');
       })
     }, 33.3);
 

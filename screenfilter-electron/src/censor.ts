@@ -1,6 +1,6 @@
 type Image = Blob;
 
-interface CensorContext {
+export interface CensorContext {
     // This is the ring buffer of images.
     history: Image[];
     // This is the index of most recent image in the ring buffer.
@@ -9,7 +9,7 @@ interface CensorContext {
     ring_size: number;
 }
 
-function censor(ctx: CensorContext, image: Image, canvas: HTMLCanvasElement) {
+export function censor(ctx: CensorContext, image: Image, canvas: HTMLCanvasElement) {
     // Update the ring buffer with the new image.
     if (ctx.history.length >= ctx.ring_size) {
         ctx.history[ctx.ring_start] = image;
