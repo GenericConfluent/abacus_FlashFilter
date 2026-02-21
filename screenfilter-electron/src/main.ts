@@ -14,7 +14,7 @@ app.on("ready", () => {
         // Note: this is currently experimental. If the system picker
         // is available, it will be used and the media request handler
         // will not be invoked.
-    }, { useSystemPicker: true })
+    }, { useSystemPicker: false })
 
     // zwlr_layer_surface_v1::set_keyboard_interactivity is needed to
     // support input passthrough on Linux (Wayland). But even that only
@@ -25,7 +25,6 @@ app.on("ready", () => {
         transparent: true,
         movable: false,
         resizable: false,
-        // This apparently exists but my LSP complains
         alwaysOnTop: true,
         enableLargerThanScreen: true,
         hasShadow: false,
@@ -45,8 +44,7 @@ app.on("ready", () => {
     browserWindow.once('ready-to-show', () => {
         setInterval(() => {
             browserWindow.setBounds({ x: 0, y: 0, width: width, height: height });
-        }, 1000)
-        //browserWindow.setBounds({ x: 0, y: 0, width: width, height: height });
+        }, 1000);
     });
     // Pass screen dimensions to renderer so it doesn't need to import 'screen'
     browserWindow.webContents.once('dom-ready', () => {
