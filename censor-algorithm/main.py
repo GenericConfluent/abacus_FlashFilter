@@ -19,7 +19,7 @@ def update_average(current: np.ndarray, sample: np.ndarray, count: int) -> np.nd
     """Update the average color of a group with a new pixel."""
     return current + (sample - current) / count
 
-def segment_frame(frame_hsl: np.ndarray, distance: int) -> np.ndarray:
+def segment_frame(frame_hsl: np.ndarray, distance: int) -> list:
     """
     Imagine fuzzy selecting every distinct block of color in a frame.
     This function will return a list of groups of pixels each group has the following info:
@@ -31,7 +31,7 @@ def segment_frame(frame_hsl: np.ndarray, distance: int) -> np.ndarray:
             pixel = frame_hsl[y, x]
             assigned = False
             for group in groups:
-                if np.linalg.norm(pixel - group.center) < distance:
+                if np.linalg.norm(pixel - group.color) < distance:
                     group.center = update_average(group.center, pos, group.count)
                     group.color = update_average(group.color, pixel, group.count)
                     group.count += 1
@@ -39,6 +39,7 @@ def segment_frame(frame_hsl: np.ndarray, distance: int) -> np.ndarray:
                     break
             if not assigned:
                 groups.append(PixelGroup(center=pos, color=pixel, count=1))
+    return groups
 
 
 # We expect frame format to be BGR
@@ -47,7 +48,7 @@ def process_frame(frame):
     global previous_frame
 
     # First we want to move to a color space where we can more nicely understand
-    # the relationships of channel changes 
+    # the relationships of channel changes
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HLS)
 
     # On first call, store the frame and return it
@@ -65,10 +66,29 @@ def process_frame(frame):
     clamped = np.maximum(current, previous - max_delta)
     clamped = np.minimum(clamped, previous + max_delta)
 
-    result = np.uint8(np.clip(clamped, 0, 255))
+    frame_uint8 = np.uint8(np.clip(clamped, 0, 255))
+
+    # Segment the frame and create visualization with distinct colors
+    groups = segment_frame(frame_uint8, distance=30)
+    result = np.zeros_like(frame_uint8)
+
+    for group_idx, group in enumerate(groups):
+        # Assign distinct colors by cycling through hue values
+        distinct_color = np.array([
+            (group_idx * 30) % 180,  # Hue cycling through color wheel
+            200,                       # High saturation
+            128                        # Medium lightness
+        ], dtype=np.uint8)
+
+        # Find all pixels belonging to this group and color them
+        for y in range(frame_uint8.shape[0]):
+            for x in range(frame_uint8.shape[1]):
+                pixel = frame_uint8[y, x]
+                if np.linalg.norm(pixel - group.color) < 30:
+                    result[y, x] = distinct_color
 
     # Store the processed frame for next iteration
-    previous_frame = result.copy()
+    previous_frame = frame_uint8.copy()
 
     return result
 
