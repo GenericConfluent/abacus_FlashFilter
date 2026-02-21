@@ -8,13 +8,15 @@ const { ipcRenderer } = require('electron');
 
 let screenWidth = window.innerWidth;
 let screenHeight = window.innerHeight;
+let flashingDissolver: FlashingDissolver;
 
 
 // Get accurate dimensions from main process (handles Retina/HiDPI correctly)
 // @ts-ignore
 ipcRenderer.once('screen-bounds', (_event, bounds) => {
-  screenWidth = bounds.width / bounds.width * 720;
-  screenHeight = bounds.height / bounds.width * 720;
+  screenWidth = Math.floor(bounds.width / bounds.width * 720);
+  screenHeight = Math.floor(bounds.height / bounds.width * 720);
+  flashingDissolver = new FlashingDissolver(screenWidth, screenHeight);
   startCapture();
 });
 
@@ -53,6 +55,7 @@ function startCapture() {
         ctx.drawImage(bitmap, 0, 0);
 
         //censor(censorCtx, bitmap, canvas);
+        flashingDissolver.feedFrame(bitmap);
         bitmap.close();
       })
     }, 33.3);
