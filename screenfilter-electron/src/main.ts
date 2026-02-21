@@ -26,21 +26,25 @@ app.on("ready", () => {
         movable: false,
         resizable: false,
         // This apparently exists but my LSP complains
-        // visibleOnAllWorkspaces: true, // MacOS, Linux
         alwaysOnTop: true,
         enableLargerThanScreen: true,
+        hasShadow: false,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
             webSecurity: false // temporarily disable to confirm CSP is the blocker
         }
     });
-    //REGION: set cer
     browserWindow.setIgnoreMouseEvents(true);
-    browserWindow.setBounds({ x: x, y: y, width, height });
     browserWindow.setAlwaysOnTop(true, 'screen-saver');
     browserWindow.setContentProtection(true)
-    //browserWindow.setSimpleFullScreen(true);
     browserWindow.loadFile('index.html');
     browserWindow.webContents.openDevTools({ mode: 'detach' });
+    browserWindow.once('ready-to-show', () => {
+        browserWindow.setBounds({ x: x, y: y, width: width, height: height });
+    });
+    // Pass screen dimensions to renderer so it doesn't need to import 'screen'
+    browserWindow.webContents.once('dom-ready', () => {
+        browserWindow.webContents.send('screen-bounds', { width, height });
+    });
 });

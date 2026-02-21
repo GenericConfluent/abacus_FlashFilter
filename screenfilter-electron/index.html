@@ -1,16 +1,35 @@
-<!-- index.html -->
 <html>
-<meta http-equiv="content-security-policy" content="script-src 'self' 'unsafe-inline' img-src 'self' blob:" />
-  <body>
-    <img width="100%" height="100%">
-    Copy
-    <script>
-      require("./dist/renderer.js")
-    </script>
-  </body>
+<head>
+  <meta http-equiv="content-security-policy" content="script-src 'self' 'unsafe-inline'; img-src 'self' blob: data:" />
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box; /* Critical: includes border in width/height */
+    }
+
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden; /* Prevents scrollbars/spillover */
+    }
+
     body {
-      border: 2px solid dodgerblue;
+      border: 2px solid dodgerblue; /* Now won't cause overflow */
+    }
+
+    img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover; /* Ensures image fills without distortion */
     }
   </style>
+</head>
+<body>
+<img id="capture" alt="screen capture">
+<script>
+  require("./dist/renderer.js")
+</script>
+</body>
 </html>
