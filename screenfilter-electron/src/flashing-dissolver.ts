@@ -167,9 +167,9 @@ export class FlashingDissolver {
     private hasPrevFrame: boolean = false;
 
     // Tuning parameters
-    private deltaAlpha: number = 0.8;   // EMA rate for flash detection
-    private colorAlpha: number = 0.15;  // EMA rate for color averaging (slower = smoother)
-    private threshold: number = 0.08;   // flash detection threshold [0,1]
+    private deltaAlpha: number = 0.7;   // EMA rate for flash detection
+    private colorAlpha: number = 0.05;  // EMA rate for color averaging (slower = smoother)
+    private threshold: number = 0.05;   // flash detection threshold [0,1]
 
     constructor(canvas: HTMLCanvasElement, captureWidth: number, captureHeight: number) {
         this.width = captureWidth;

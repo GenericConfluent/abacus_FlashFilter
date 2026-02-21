@@ -10,8 +10,8 @@ let flashingDissolver: FlashingDissolver;
 // Get accurate dimensions from main process (handles Retina/HiDPI correctly)
 // @ts-ignore
 ipcRenderer.once('screen-bounds', (_event, bounds) => {
-  screenWidth = Math.floor(bounds.width / bounds.width * 720);
-  screenHeight = Math.floor(bounds.height / bounds.width * 720);
+  screenWidth = bounds.width;
+  screenHeight = bounds.height;
 
   const canvas = document.querySelector('canvas')!;
   flashingDissolver = new FlashingDissolver(canvas, screenWidth, screenHeight);
@@ -39,6 +39,6 @@ function startCapture() {
       }).catch((e: Error) => {
         // Frame grab can fail transiently, ignore
       });
-    }, 33.3);
+    }, 1);
   }).catch(e => console.log(e));
 }
