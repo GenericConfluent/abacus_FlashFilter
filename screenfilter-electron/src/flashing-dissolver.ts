@@ -205,7 +205,10 @@ export class FlashingDissolver {
         // Draw bitmap to temp canvas, then upload
         this.tmpCtx.drawImage(bitmap, 0, 0, this.width, this.height);
         gl.bindTexture(gl.TEXTURE_2D, tex);
+        // Flip Y so top-left canvas origin maps to WebGL's bottom-left origin
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, this.tmpCanvas);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     }
 
     feedFrame(frame: ImageBitmap) {
