@@ -1,5 +1,7 @@
 import { app, ipcMain, desktopCapturer, session,  BrowserWindow, screen } from 'electron';
 
+const DEBUG = false;
+
 // WARN: The focusable flag that allows input passthrough only works on windows
 // and MacOS.
 app.on("ready", () => {
@@ -40,7 +42,9 @@ app.on("ready", () => {
     browserWindow.setContentProtection(true)
     browserWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     browserWindow.loadFile('index.html');
-    browserWindow.webContents.openDevTools({ mode: 'detach' });
+    if (DEBUG) {
+        browserWindow.webContents.openDevTools({ mode: 'detach' });
+    }
     browserWindow.once('ready-to-show', () => {
         setInterval(() => {
             browserWindow.setBounds({ x: 0, y: 0, width: width, height: height });
