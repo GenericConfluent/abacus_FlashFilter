@@ -1,0 +1,22 @@
+let frame[k] denote the kth frame returned by the stream.
+
+define flash_belief_buffer sizeof frame each value into to 1.0
+define average_color sizeof frame each value init to 0.0
+define previous_frame sizeof frame init to frame[0]
+
+for k in NaturalNumber - {0} {
+    # NOTE: We compute distance per pixels. (negative offset so that when dist near 0 we get about .95 as our update
+    # and we naturally decay, this offset is a hyperparameter which needs tuning)
+    let flash_rel_previous = exp(distance(frame[k], previous_frame)) - 0.05
+    let flash_rel_average = exp(distance(frame[k], average_color)) - 0.05
+
+    # We may actually even want to average these rather than mutliplying.
+    let delta = flash_rel_previous * flash_rel_average;
+
+    # Update our belief that the pixel is flashing. Clamp to 1 so that we never hit zero and
+    # have a belief we are unable to update. 
+    flash_belief_buffer = max(flash_belief_buffer * delta, 1.0);
+
+    previous_frame = frame[k]
+    # Classify as normal using some threshold.
+}
