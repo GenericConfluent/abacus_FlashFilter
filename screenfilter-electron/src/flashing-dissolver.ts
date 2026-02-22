@@ -34,10 +34,11 @@ void main() {
     float distPrev = distance(curr, prev);
     float distAvg  = distance(curr, avg);
 
-    float flashRelPrev = exp(distPrev) - 0.05;
+    float flashRelPrev = exp(distPrev) - 0.5;
     float flashRelAvg  = exp(distAvg)  - 0.05;
 
-    float delta = flashRelPrev * flashRelAvg;
+    float delta = flashRelPrev;
+    // float delta = flashRelPrev * flashRelAvg;
 
     // Clamp to min 1.0 so belief never reaches zero.
     float newBelief = max(oldBelief * delta, 1.0);
@@ -184,7 +185,7 @@ export class FlashingDissolver {
 
     // Tuning parameters
     private colorAlpha: number = 0.05;  // EMA rate for color averaging (slower = smoother)
-    private threshold: number = 1.5;    // flash belief threshold; baseline is 1.0, higher = less sensitive
+    private threshold: number = 500.0;    // flash belief threshold; baseline is 1.0, higher = less sensitive
 
     constructor(canvas: HTMLCanvasElement, captureWidth: number, captureHeight: number) {
         this.width = captureWidth;
