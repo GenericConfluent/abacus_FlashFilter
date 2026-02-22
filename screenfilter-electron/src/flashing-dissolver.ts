@@ -7,10 +7,14 @@ void main() {
     gl_Position = vec4(a_position, 0.0, 1.0);
 }`;
 
-// Pass 1: Delta EMA
-// Computes euclidean distance between prev and current frame,
-// then blends into the historical delta buffer.
-const DELTA_EMA_FRAG = `#version 300 es
+// Pass 1: Flash Belief Update
+// Per pixel: flash_rel_prev = exp(dist(curr, prev)) - 0.05
+//            flash_rel_avg  = exp(dist(curr, avg))  - 0.05
+//            delta = flash_rel_prev * flash_rel_avg
+//            belief = max(belief * delta, 1.0)
+// Belief decays toward 1.0 at rest (small dist → exp≈1 → delta≈0.9025),
+// and grows above 1.0 when flashing (large dist → large exp → large delta).
+const BELIEF_UPDATE_FRAG = `#version 300 es
 precision highp float;
 
 in vec2 v_uv;
@@ -18,21 +22,27 @@ out vec4 fragColor;
 
 uniform sampler2D u_prevFrame;
 uniform sampler2D u_currentFrame;
-uniform sampler2D u_history;
-uniform float u_alpha;
-uniform float u_firstFrame;
+uniform sampler2D u_colorAvg;
+uniform sampler2D u_belief;
 
 void main() {
     vec3 prev = texture(u_prevFrame, v_uv).rgb;
     vec3 curr = texture(u_currentFrame, v_uv).rgb;
-    float hist = texture(u_history, v_uv).r;
+    vec3 avg  = texture(u_colorAvg,   v_uv).rgb;
+    float oldBelief = texture(u_belief, v_uv).r;
 
-    float delta = distance(prev, curr);
+    float distPrev = distance(curr, prev);
+    float distAvg  = distance(curr, avg);
 
-    // EMA: hist = hist + alpha * (delta - hist)
-    float newHist = mix(hist + u_alpha * (delta - hist), delta, u_firstFrame);
+    float flashRelPrev = exp(distPrev) - 0.05;
+    float flashRelAvg  = exp(distAvg)  - 0.05;
 
-    fragColor = vec4(newHist, newHist, newHist, 1.0);
+    float delta = flashRelPrev * flashRelAvg;
+
+    // Clamp to min 1.0 so belief never reaches zero.
+    float newBelief = max(oldBelief * delta, 1.0);
+
+    fragColor = vec4(newBelief, 0.0, 0.0, 1.0);
 }`;
 
 // Pass 2: Color EMA
@@ -50,35 +60,33 @@ uniform float u_firstFrame;
 
 void main() {
     vec3 curr = texture(u_currentFrame, v_uv).rgb;
-    vec3 avg = texture(u_colorAvg, v_uv).rgb;
+    vec3 avg  = texture(u_colorAvg,    v_uv).rgb;
 
-    // EMA: avg = avg + alpha * (curr - avg)
+    // EMA: avg = avg + alpha * (curr - avg); on first frame, snap to curr.
     vec3 newAvg = mix(avg + u_colorAlpha * (curr - avg), curr, u_firstFrame);
 
     fragColor = vec4(newAvg, 1.0);
 }`;
 
 // Pass 3: Output
-// If flash detected, draw the averaged color; otherwise transparent.
+// If flash belief > threshold (baseline is 1.0), draw averaged color; otherwise transparent.
 const OUTPUT_FRAG = `#version 300 es
 precision highp float;
 
 in vec2 v_uv;
 out vec4 fragColor;
 
-uniform sampler2D u_deltaHistory;
+uniform sampler2D u_belief;
 uniform sampler2D u_colorAvg;
 uniform float u_threshold;
 
 void main() {
-    float flashValue = texture(u_deltaHistory, v_uv).r;
+    float belief = texture(u_belief, v_uv).r;
 
-    if (flashValue > u_threshold) {
-        // Replace flashing pixel with the averaged color
+    if (belief > u_threshold) {
         vec3 avg = texture(u_colorAvg, v_uv).rgb;
         fragColor = vec4(avg, 1.0);
     } else {
-        // Fully transparent — real screen shows through
         fragColor = vec4(0.0, 0.0, 0.0, 0.0);
     }
 }`;
@@ -110,12 +118,20 @@ function createProgram(gl: WebGL2RenderingContext, vertSrc: string, fragSrc: str
     return prog;
 }
 
-function createTexture(gl: WebGL2RenderingContext, width: number, height: number): WebGLTexture {
+function createTexture(gl: WebGL2RenderingContext, width: number, height: number, float32: boolean = false): WebGLTexture {
     const tex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    if (float32) {
+        // R32F: single-channel float, values can exceed 1.0 for belief accumulation.
+        // Must use NEAREST filtering — LINEAR on float textures requires OES_texture_float_linear.
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, width, height, 0, gl.RED, gl.FLOAT, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    }
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     return tex;
@@ -134,7 +150,7 @@ export class FlashingDissolver {
     private height: number;
 
     // Programs
-    private deltaEmaProgram: WebGLProgram;
+    private beliefUpdateProgram: WebGLProgram;
     private colorEmaProgram: WebGLProgram;
     private outputProgram: WebGLProgram;
 
@@ -145,12 +161,12 @@ export class FlashingDissolver {
     private prevFrameTex: WebGLTexture;
     private currentFrameTex: WebGLTexture;
 
-    // Delta history ping-pong
-    private deltaTexA: WebGLTexture;
-    private deltaTexB: WebGLTexture;
-    private deltaFboA: WebGLFramebuffer;
-    private deltaFboB: WebGLFramebuffer;
-    private deltaReadA: boolean = true;
+    // Flash belief ping-pong (R32F float — values range [1.0, ∞))
+    private beliefTexA: WebGLTexture;
+    private beliefTexB: WebGLTexture;
+    private beliefFboA: WebGLFramebuffer;
+    private beliefFboB: WebGLFramebuffer;
+    private beliefReadA: boolean = true;
 
     // Color average ping-pong
     private colorAvgTexA: WebGLTexture;
@@ -167,9 +183,8 @@ export class FlashingDissolver {
     private hasPrevFrame: boolean = false;
 
     // Tuning parameters
-    private deltaAlpha: number = 0.7;   // EMA rate for flash detection
     private colorAlpha: number = 0.05;  // EMA rate for color averaging (slower = smoother)
-    private threshold: number = 0.05;   // flash detection threshold [0,1]
+    private threshold: number = 1.5;    // flash belief threshold; baseline is 1.0, higher = less sensitive
 
     constructor(canvas: HTMLCanvasElement, captureWidth: number, captureHeight: number) {
         this.width = captureWidth;
@@ -186,13 +201,16 @@ export class FlashingDissolver {
         if (!gl) throw new Error('WebGL2 not supported');
         this.gl = gl;
 
+        // Required for rendering to float framebuffers (belief buffer).
+        gl.getExtension('EXT_color_buffer_float');
+
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
         // Compile programs
-        this.deltaEmaProgram = createProgram(gl, VERT_SRC, DELTA_EMA_FRAG);
-        this.colorEmaProgram = createProgram(gl, VERT_SRC, COLOR_EMA_FRAG);
-        this.outputProgram = createProgram(gl, VERT_SRC, OUTPUT_FRAG);
+        this.beliefUpdateProgram = createProgram(gl, VERT_SRC, BELIEF_UPDATE_FRAG);
+        this.colorEmaProgram     = createProgram(gl, VERT_SRC, COLOR_EMA_FRAG);
+        this.outputProgram       = createProgram(gl, VERT_SRC, OUTPUT_FRAG);
 
         // Full-screen quad
         this.quadVAO = gl.createVertexArray()!;
@@ -208,16 +226,22 @@ export class FlashingDissolver {
         gl.bindVertexArray(null);
 
         // Frame textures
-        this.prevFrameTex = createTexture(gl, captureWidth, captureHeight);
+        this.prevFrameTex    = createTexture(gl, captureWidth, captureHeight);
         this.currentFrameTex = createTexture(gl, captureWidth, captureHeight);
 
-        // Delta history ping-pong
-        this.deltaTexA = createTexture(gl, captureWidth, captureHeight);
-        this.deltaTexB = createTexture(gl, captureWidth, captureHeight);
-        this.deltaFboA = createFBO(gl, this.deltaTexA);
-        this.deltaFboB = createFBO(gl, this.deltaTexB);
+        // Flash belief ping-pong (float32, initialized to 1.0)
+        this.beliefTexA = createTexture(gl, captureWidth, captureHeight, true);
+        this.beliefTexB = createTexture(gl, captureWidth, captureHeight, true);
+        this.beliefFboA = createFBO(gl, this.beliefTexA);
+        this.beliefFboB = createFBO(gl, this.beliefTexB);
 
-        // Color average ping-pong
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.beliefFboA);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.beliefFboB);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // Color average ping-pong (initialized to 0.0 by default)
         this.colorAvgTexA = createTexture(gl, captureWidth, captureHeight);
         this.colorAvgTexB = createTexture(gl, captureWidth, captureHeight);
         this.colorAvgFboA = createFBO(gl, this.colorAvgTexA);
@@ -251,13 +275,14 @@ export class FlashingDissolver {
         // Swap prev/current, upload new frame
         if (this.hasPrevFrame) {
             const tmp = this.prevFrameTex;
-            this.prevFrameTex = this.currentFrameTex;
+            this.prevFrameTex    = this.currentFrameTex;
             this.currentFrameTex = tmp;
         }
 
         this.uploadBitmapToTexture(frame, this.currentFrameTex);
 
         if (!this.hasPrevFrame) {
+            // Initialize previous_frame = frame[0] per pseudocode
             this.uploadBitmapToTexture(frame, this.prevFrameTex);
             this.hasPrevFrame = true;
             return;
@@ -265,38 +290,40 @@ export class FlashingDissolver {
 
         const isFirst = this.firstFrame ? 1.0 : 0.0;
 
-        // --- Pass 1: Delta EMA ---
-        const readDeltaTex = this.deltaReadA ? this.deltaTexA : this.deltaTexB;
-        const writeDeltaFbo = this.deltaReadA ? this.deltaFboB : this.deltaFboA;
-        const writeDeltaTex = this.deltaReadA ? this.deltaTexB : this.deltaTexA;
+        // Determine ping-pong read/write sides up front
+        const readBeliefTex  = this.beliefReadA ? this.beliefTexA  : this.beliefTexB;
+        const writeBeliefFbo = this.beliefReadA ? this.beliefFboB  : this.beliefFboA;
+        const writeBeliefTex = this.beliefReadA ? this.beliefTexB  : this.beliefTexA;
 
-        gl.useProgram(this.deltaEmaProgram);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, writeDeltaFbo);
+        const readColorTex   = this.colorReadA  ? this.colorAvgTexA : this.colorAvgTexB;
+        const writeColorFbo  = this.colorReadA  ? this.colorAvgFboB : this.colorAvgFboA;
+        const writeColorTex  = this.colorReadA  ? this.colorAvgTexB : this.colorAvgTexA;
+
+        // --- Pass 1: Belief Update ---
+        gl.useProgram(this.beliefUpdateProgram);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, writeBeliefFbo);
         gl.viewport(0, 0, this.width, this.height);
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.prevFrameTex);
-        gl.uniform1i(gl.getUniformLocation(this.deltaEmaProgram, 'u_prevFrame'), 0);
+        gl.uniform1i(gl.getUniformLocation(this.beliefUpdateProgram, 'u_prevFrame'), 0);
 
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, this.currentFrameTex);
-        gl.uniform1i(gl.getUniformLocation(this.deltaEmaProgram, 'u_currentFrame'), 1);
+        gl.uniform1i(gl.getUniformLocation(this.beliefUpdateProgram, 'u_currentFrame'), 1);
 
         gl.activeTexture(gl.TEXTURE2);
-        gl.bindTexture(gl.TEXTURE_2D, readDeltaTex);
-        gl.uniform1i(gl.getUniformLocation(this.deltaEmaProgram, 'u_history'), 2);
+        gl.bindTexture(gl.TEXTURE_2D, readColorTex);
+        gl.uniform1i(gl.getUniformLocation(this.beliefUpdateProgram, 'u_colorAvg'), 2);
 
-        gl.uniform1f(gl.getUniformLocation(this.deltaEmaProgram, 'u_alpha'), this.deltaAlpha);
-        gl.uniform1f(gl.getUniformLocation(this.deltaEmaProgram, 'u_firstFrame'), isFirst);
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, readBeliefTex);
+        gl.uniform1i(gl.getUniformLocation(this.beliefUpdateProgram, 'u_belief'), 3);
 
         this.drawQuad();
-        this.deltaReadA = !this.deltaReadA;
+        this.beliefReadA = !this.beliefReadA;
 
         // --- Pass 2: Color EMA ---
-        const readColorTex = this.colorReadA ? this.colorAvgTexA : this.colorAvgTexB;
-        const writeColorFbo = this.colorReadA ? this.colorAvgFboB : this.colorAvgFboA;
-        const writeColorTex = this.colorReadA ? this.colorAvgTexB : this.colorAvgTexA;
-
         gl.useProgram(this.colorEmaProgram);
         gl.bindFramebuffer(gl.FRAMEBUFFER, writeColorFbo);
         gl.viewport(0, 0, this.width, this.height);
@@ -325,8 +352,8 @@ export class FlashingDissolver {
         gl.clear(gl.COLOR_BUFFER_BIT);
 
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, writeDeltaTex);
-        gl.uniform1i(gl.getUniformLocation(this.outputProgram, 'u_deltaHistory'), 0);
+        gl.bindTexture(gl.TEXTURE_2D, writeBeliefTex);
+        gl.uniform1i(gl.getUniformLocation(this.outputProgram, 'u_belief'), 0);
 
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, writeColorTex);
@@ -339,17 +366,17 @@ export class FlashingDissolver {
 
     destroy() {
         const gl = this.gl;
-        gl.deleteProgram(this.deltaEmaProgram);
+        gl.deleteProgram(this.beliefUpdateProgram);
         gl.deleteProgram(this.colorEmaProgram);
         gl.deleteProgram(this.outputProgram);
         gl.deleteTexture(this.prevFrameTex);
         gl.deleteTexture(this.currentFrameTex);
-        gl.deleteTexture(this.deltaTexA);
-        gl.deleteTexture(this.deltaTexB);
+        gl.deleteTexture(this.beliefTexA);
+        gl.deleteTexture(this.beliefTexB);
         gl.deleteTexture(this.colorAvgTexA);
         gl.deleteTexture(this.colorAvgTexB);
-        gl.deleteFramebuffer(this.deltaFboA);
-        gl.deleteFramebuffer(this.deltaFboB);
+        gl.deleteFramebuffer(this.beliefFboA);
+        gl.deleteFramebuffer(this.beliefFboB);
         gl.deleteFramebuffer(this.colorAvgFboA);
         gl.deleteFramebuffer(this.colorAvgFboB);
     }
