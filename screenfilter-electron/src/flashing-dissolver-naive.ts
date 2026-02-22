@@ -1,6 +1,6 @@
 /* Naive dissolver good at handling flash impulses
  */
-export class FlashingDissolver {
+export class FlashingDissolverNaive {
     screenWidth: number;
     screenHeight: number;
     ctx: CanvasRenderingContext2D;
