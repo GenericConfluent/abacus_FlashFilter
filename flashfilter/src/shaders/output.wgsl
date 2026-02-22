@@ -27,7 +27,6 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
 
 struct Params {
     threshold: f32,
-    _pad:      vec3<f32>,
 }
 @group(0) @binding(3) var<uniform> params: Params;
 
