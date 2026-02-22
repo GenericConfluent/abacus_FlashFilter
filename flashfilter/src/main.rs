@@ -190,11 +190,18 @@ impl ApplicationHandler for App {
 
             WindowEvent::RedrawRequested => {
                 // Drain the channel, keeping only the most recent frame.
+                // Only render when a *new* frame has arrived; re-running the
+                // filter on stale data would advance the EMA with zero motion
+                // and cause flash detections to decay far too quickly.
+                let mut new_frame = false;
                 while let Ok(f) = self.frame_rx.try_recv() {
                     self.latest = Some(f);
+                    new_frame = true;
                 }
-                if let Some(s) = &mut self.state {
-                    s.render(self.latest.as_ref());
+                if new_frame {
+                    if let Some(s) = &mut self.state {
+                        s.render(self.latest.as_ref());
+                    }
                 }
             }
 

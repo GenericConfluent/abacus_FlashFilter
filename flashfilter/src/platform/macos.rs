@@ -96,7 +96,8 @@ impl ScreenCapture {
         let config = SCStreamConfiguration::new()
             .with_width(width)
             .with_height(height)
-            .with_pixel_format(PixelFormat::BGRA);
+            .with_pixel_format(PixelFormat::BGRA)
+            .with_fps(60);
 
         let (tx, rx) = sync_channel(1);
         let handler  = CaptureHandler { tx, width, height };
@@ -146,9 +147,19 @@ pub fn setup_window(window: &Window) {
         // NSWindowSharingNone = 0
         let _: () = msg_send![ns_window, setSharingType: 0u64];
 
-        // NSWindowCollectionBehaviorCanJoinAllSpaces (1 << 3) |
-        // NSWindowCollectionBehaviorTransient        (1 << 5)
-        let behavior: u64 = (1 << 3) | (1 << 5);
+        // Raise the window level to NSScreenSaverWindowLevel (1000) so the
+        // overlay sits above full-screen apps and videos inside their Space.
+        let _: () = msg_send![ns_window, setLevel: 1000i64];
+
+        // NSWindowCollectionBehaviorCanJoinAllSpaces   (1 << 0 =   1)
+        //   → window appears in every Space, including full-screen app Spaces.
+        // NSWindowCollectionBehaviorStationary         (1 << 4 =  16)
+        //   → unaffected by Exposé / Mission Control; does not move between Spaces.
+        // NSWindowCollectionBehaviorIgnoresCycle       (1 << 6 =  64)
+        //   → excluded from Cmd+Tab switcher.
+        // NSWindowCollectionBehaviorFullScreenAuxiliary (1 << 8 = 256)
+        //   → permitted to appear alongside a full-screen primary window.
+        let behavior: u64 = 1 | 16 | 64 | 256;
         let _: () = msg_send![ns_window, setCollectionBehavior: behavior];
     }
 }
