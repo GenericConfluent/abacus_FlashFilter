@@ -1,3 +1,5 @@
+<img width="806" height="452" alt="image" src="https://github.com/user-attachments/assets/6a2ff603-f914-439c-8a83-155bd05a2607" />
+
 # FlashFilter
 
 Cross Platform Real-time screen flash detection and suppression .
